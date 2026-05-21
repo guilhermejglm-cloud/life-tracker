@@ -24,6 +24,15 @@ const DEFAULT_SKILLS = [
 
 const XP_PER = 50;
 
+// ── Mood levels ───────────────────────────────────────────────────────────────
+const MOODS = [
+  { value: 1, emoji: '😔', label: 'Péssimo' },
+  { value: 2, emoji: '😕', label: 'Ruim'    },
+  { value: 3, emoji: '😐', label: 'Neutro'  },
+  { value: 4, emoji: '🙂', label: 'Bem'     },
+  { value: 5, emoji: '😄', label: 'Ótimo'   },
+];
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function todayStr() {
   const d = new Date();
@@ -225,8 +234,55 @@ function Header({ xpMap, history }) {
   );
 }
 
+// ── Mood thermometer ──────────────────────────────────────────────────────────
+function MoodThermometer({ mood, onChange }) {
+  return (
+    <div style={{
+      background:'rgba(255,255,255,0.025)', borderRadius:12, padding:'16px 18px',
+      marginBottom:18, border:'1px solid rgba(255,255,255,0.055)',
+    }}>
+      <div style={{ fontSize:11, color:'#555', letterSpacing:.7, marginBottom:12 }}>COMO ESTOU HOJE</div>
+      <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+        {MOODS.map(m => {
+          const active  = mood === m.value;
+          const filled  = mood >= m.value;
+          return (
+            <button
+              key={m.value}
+              onClick={() => onChange(active ? null : m.value)}
+              style={{
+                flex:1, padding:'10px 4px', borderRadius:9, cursor:'pointer',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+                background: filled ? 'rgba(201,168,76,0.1)' : 'rgba(255,255,255,0.025)',
+                border: active
+                  ? '1px solid rgba(201,168,76,0.55)'
+                  : '1px solid rgba(255,255,255,0.055)',
+                transition:'all .25s ease',
+                transform: active ? 'scale(1.06)' : 'scale(1)',
+              }}
+            >
+              <span style={{ fontSize:22, lineHeight:1 }}>{m.emoji}</span>
+              <span style={{ fontSize:10, color: active ? '#c9a84c' : '#484848' }}>{m.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Thermometer fill bar */}
+      <div style={{ height:4, background:'#111', borderRadius:2, overflow:'hidden' }}>
+        <div style={{
+          height:'100%',
+          width: mood ? `${(mood / 5) * 100}%` : '0%',
+          background:'linear-gradient(90deg,#8a6a20,#c9a84c,#f0d080)',
+          borderRadius:2,
+          transition:'width .45s cubic-bezier(.4,0,.2,1)',
+        }} />
+      </div>
+    </div>
+  );
+}
+
 // ── Activity card ─────────────────────────────────────────────────────────────
-function ActivityCard({ skill, xp, checked, onToggle }) {
+function ActivityCard({ skill, xp, checked, onToggle, onDelete }) {
   const { lvl } = calcLevel(xp);
   const ref = useRef(null);
 
@@ -273,29 +329,47 @@ function ActivityCard({ skill, xp, checked, onToggle }) {
         </div>
         <div style={{ fontSize:11, color:'#555', marginTop:2 }}>Nível {lvl} · +{XP_PER} XP</div>
       </div>
-      <div style={{
-        width:22, height:22, borderRadius:'50%', flexShrink:0,
-        border: `1.5px solid ${checked ? '#c9a84c' : '#2a2a2a'}`,
-        background: checked ? '#c9a84c' : 'transparent',
-        display:'flex', alignItems:'center', justifyContent:'center',
-        fontSize:11, color:'#080808', fontWeight:700,
-        transition:'all .28s cubic-bezier(.4,0,.2,1)',
-      }}>
-        {checked && '✓'}
-      </div>
+      {onDelete ? (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(skill.id); }}
+          style={{
+            background:'rgba(192,80,80,0.12)', border:'1px solid rgba(192,80,80,0.3)',
+            borderRadius:6, color:'#c05050', fontSize:15, width:26, height:26,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            flexShrink:0, lineHeight:1, transition:'all .2s',
+          }}
+          onMouseOver={e => { e.currentTarget.style.background='rgba(192,80,80,0.25)'; }}
+          onMouseOut={e  => { e.currentTarget.style.background='rgba(192,80,80,0.12)'; }}
+        >×</button>
+      ) : (
+        <div style={{
+          width:22, height:22, borderRadius:'50%', flexShrink:0,
+          border: `1.5px solid ${checked ? '#c9a84c' : '#2a2a2a'}`,
+          background: checked ? '#c9a84c' : 'transparent',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize:11, color:'#080808', fontWeight:700,
+          transition:'all .28s cubic-bezier(.4,0,.2,1)',
+        }}>
+          {checked && '✓'}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Today tab ─────────────────────────────────────────────────────────────────
-function TodayTab({ skills, checks, xpMap, onToggle, diary, onDiaryChange, onAddActivity }) {
-  const done  = checks.length;
-  const total = skills.length;
-  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+function TodayTab({ skills, checks, xpMap, onToggle, diary, onDiaryChange, onAddActivity, onDeleteSkill, mood, onMoodChange }) {
+  const [editMode, setEditMode] = useState(false);
+  const done    = checks.length;
+  const total   = skills.length;
+  const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
   const perfect = done === total && total > 0;
 
   return (
     <div className="tab-panel">
+      {/* Mood thermometer */}
+      <MoodThermometer mood={mood} onChange={onMoodChange} />
+
       {/* Day progress */}
       <div style={{
         background:'rgba(255,255,255,0.025)', borderRadius:12, padding:'16px 18px',
@@ -323,32 +397,48 @@ function TodayTab({ skills, checks, xpMap, onToggle, diary, onDiaryChange, onAdd
       </div>
 
       {/* Cards */}
-      <div style={{ display:'flex', flexDirection:'column', gap:7, marginBottom:16 }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:7, marginBottom:12 }}>
         {skills.map(s => (
           <ActivityCard
             key={s.id}
             skill={s}
             xp={xpMap[s.id] || 0}
             checked={checks.includes(s.id)}
-            onToggle={onToggle}
+            onToggle={editMode ? () => {} : onToggle}
+            onDelete={editMode ? onDeleteSkill : null}
           />
         ))}
       </div>
 
-      {/* Add activity */}
-      <button
-        onClick={onAddActivity}
-        style={{
-          width:'100%', padding:'11px', marginBottom:22,
-          background:'transparent', border:'1px dashed rgba(201,168,76,0.25)',
-          borderRadius:10, color:'rgba(201,168,76,0.5)', fontSize:13,
-          transition:'all .25s ease',
-        }}
-        onMouseOver={e => { e.currentTarget.style.borderColor='rgba(201,168,76,0.55)'; e.currentTarget.style.color='#c9a84c'; }}
-        onMouseOut={e  => { e.currentTarget.style.borderColor='rgba(201,168,76,0.25)'; e.currentTarget.style.color='rgba(201,168,76,0.5)'; }}
-      >
-        + Nova atividade
-      </button>
+      {/* Add / Edit buttons */}
+      <div style={{ display:'flex', gap:8, marginBottom:22 }}>
+        <button
+          onClick={onAddActivity}
+          style={{
+            flex:1, padding:'11px',
+            background:'transparent', border:'1px dashed rgba(201,168,76,0.25)',
+            borderRadius:10, color:'rgba(201,168,76,0.5)', fontSize:13,
+            transition:'all .25s ease',
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor='rgba(201,168,76,0.55)'; e.currentTarget.style.color='#c9a84c'; }}
+          onMouseOut={e  => { e.currentTarget.style.borderColor='rgba(201,168,76,0.25)'; e.currentTarget.style.color='rgba(201,168,76,0.5)'; }}
+        >
+          + Nova atividade
+        </button>
+        <button
+          onClick={() => setEditMode(v => !v)}
+          style={{
+            padding:'11px 16px',
+            background: editMode ? 'rgba(192,80,80,0.12)' : 'transparent',
+            border: editMode ? '1px solid rgba(192,80,80,0.35)' : '1px dashed rgba(255,255,255,0.1)',
+            borderRadius:10,
+            color: editMode ? '#c05050' : '#484848',
+            fontSize:13, transition:'all .25s ease',
+          }}
+        >
+          {editMode ? 'Concluir' : '✎ Editar'}
+        </button>
+      </div>
 
       {/* Diary */}
       <div style={{
@@ -371,8 +461,143 @@ function TodayTab({ skills, checks, xpMap, onToggle, diary, onDiaryChange, onAdd
   );
 }
 
+// ── Export / Import helpers ───────────────────────────────────────────────────
+function makeExportCode() {
+  const data = {
+    skills:  localStorage.getItem(SK.skills),
+    xp:      localStorage.getItem(SK.xp),
+    history: localStorage.getItem(SK.history),
+    today:   localStorage.getItem(SK.today),
+  };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+}
+
+function applyImportCode(code) {
+  try {
+    const data = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+    if (data.skills)  localStorage.setItem(SK.skills,  data.skills);
+    if (data.xp)      localStorage.setItem(SK.xp,      data.xp);
+    if (data.history) localStorage.setItem(SK.history, data.history);
+    if (data.today)   localStorage.setItem(SK.today,   data.today);
+    return true;
+  } catch { return false; }
+}
+
+// ── Export modal ──────────────────────────────────────────────────────────────
+function ExportModal({ onClose }) {
+  const code = makeExportCode();
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, background:'rgba(0,0,0,0.82)',
+      display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:'#0d0d0d', border:'1px solid rgba(201,168,76,0.22)',
+        borderRadius:14, padding:'26px 22px', width:'100%', maxWidth:420,
+        animation:'levelUpIn .28s ease',
+      }}>
+        <div className="golden" style={{ fontSize:17, fontWeight:600, marginBottom:8 }}>Exportar dados</div>
+        <div style={{ fontSize:13, color:'#666', marginBottom:16, lineHeight:1.5 }}>
+          Copie o código abaixo e cole em outro navegador para transferir seu histórico.
+        </div>
+        <textarea
+          readOnly
+          value={code}
+          style={{
+            width:'100%', height:100, background:'rgba(255,255,255,0.04)',
+            border:'1px solid rgba(255,255,255,0.08)', borderRadius:8,
+            color:'#777', fontSize:11, padding:'10px', resize:'none',
+            fontFamily:'monospace', lineHeight:1.4,
+          }}
+        />
+        <div style={{ display:'flex', gap:9, marginTop:12 }}>
+          <button onClick={onClose} style={{
+            flex:1, padding:'10px', borderRadius:8, background:'transparent',
+            border:'1px solid rgba(255,255,255,0.08)', color:'#555', fontSize:13,
+          }}>Fechar</button>
+          <button onClick={copy} style={{
+            flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:500,
+            background: copied ? 'rgba(92,184,92,0.15)' : 'rgba(201,168,76,0.12)',
+            border: copied ? '1px solid rgba(92,184,92,0.4)' : '1px solid rgba(201,168,76,0.35)',
+            color: copied ? '#5cb85c' : '#c9a84c',
+            transition:'all .25s ease',
+          }}>
+            {copied ? '✓ Copiado!' : 'Copiar código'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Import modal ──────────────────────────────────────────────────────────────
+function ImportModal({ onClose }) {
+  const [code,  setCode]  = useState('');
+  const [error, setError] = useState('');
+
+  const apply = () => {
+    if (!code.trim()) return;
+    const ok = applyImportCode(code);
+    if (ok) { window.location.reload(); }
+    else    { setError('Código inválido. Verifique e tente de novo.'); }
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, background:'rgba(0,0,0,0.82)',
+      display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:'#0d0d0d', border:'1px solid rgba(201,168,76,0.22)',
+        borderRadius:14, padding:'26px 22px', width:'100%', maxWidth:420,
+        animation:'levelUpIn .28s ease',
+      }}>
+        <div className="golden" style={{ fontSize:17, fontWeight:600, marginBottom:8 }}>Importar dados</div>
+        <div style={{ fontSize:13, color:'#666', marginBottom:16, lineHeight:1.5 }}>
+          Cole aqui o código que você exportou de outro navegador.
+        </div>
+        <textarea
+          value={code}
+          onChange={e => { setCode(e.target.value); setError(''); }}
+          placeholder="Cole o código aqui..."
+          style={{
+            width:'100%', height:100, background:'rgba(255,255,255,0.04)',
+            border:`1px solid ${error ? 'rgba(192,80,80,0.4)' : 'rgba(255,255,255,0.08)'}`,
+            borderRadius:8, color:'#ccc', fontSize:11, padding:'10px',
+            resize:'none', fontFamily:'monospace', lineHeight:1.4,
+          }}
+        />
+        {error && <div style={{ color:'#c05050', fontSize:12, marginTop:8 }}>{error}</div>}
+        <div style={{ display:'flex', gap:9, marginTop:12 }}>
+          <button onClick={onClose} style={{
+            flex:1, padding:'10px', borderRadius:8, background:'transparent',
+            border:'1px solid rgba(255,255,255,0.08)', color:'#555', fontSize:13,
+          }}>Cancelar</button>
+          <button onClick={apply} style={{
+            flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:500,
+            background:'rgba(201,168,76,0.12)', border:'1px solid rgba(201,168,76,0.35)',
+            color:'#c9a84c',
+          }}>Importar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Panel tab ─────────────────────────────────────────────────────────────────
 function PanelTab({ history, skills, xpMap, onDeleteSkill, onAddActivity }) {
+  const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
   return (
     <div className="tab-panel">
       {/* History */}
@@ -393,7 +618,14 @@ function PanelTab({ history, skills, xpMap, onDeleteSkill, onAddActivity }) {
                   borderRadius:10, border:'1px solid rgba(255,255,255,0.048)',
                 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                    <span style={{ fontSize:12, color:'#666' }}>{entry.date}</span>
+                    <span style={{ fontSize:12, color:'#666' }}>
+                      {entry.date}
+                      {entry.mood && (
+                        <span style={{ marginLeft:8 }}>
+                          {MOODS.find(m => m.value === entry.mood)?.emoji}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ fontSize:12, color:'#c9a84c' }}>+{entry.checks.length * XP_PER} XP · {pct}%</span>
                   </div>
                   <div style={{ fontSize:18, letterSpacing:2, marginBottom: entry.diary ? 6 : 0 }}>
@@ -438,25 +670,60 @@ function PanelTab({ history, skills, xpMap, onDeleteSkill, onAddActivity }) {
                 <span style={{ fontSize:17 }}>{s.emoji}</span>
                 <span style={{ flex:1, fontSize:13, color:'#bbb' }}>{s.name}</span>
                 <span style={{ fontSize:11, color:'#555' }}>Nv {lvl}</span>
-                {!s.isDefault && (
-                  <button
-                    onClick={() => onDeleteSkill(s.id)}
-                    style={{
-                      background:'transparent', border:'none',
-                      color:'#383838', fontSize:18, padding:'2px 5px',
-                      lineHeight:1, transition:'color .2s',
-                    }}
-                    onMouseOver={e => e.currentTarget.style.color='#c05050'}
-                    onMouseOut={e  => e.currentTarget.style.color='#383838'}
-                  >
-                    ×
-                  </button>
-                )}
+                <button
+                  onClick={() => onDeleteSkill(s.id)}
+                  style={{
+                    background:'transparent', border:'none',
+                    color:'#383838', fontSize:18, padding:'2px 5px',
+                    lineHeight:1, transition:'color .2s',
+                  }}
+                  onMouseOver={e => e.currentTarget.style.color='#c05050'}
+                  onMouseOut={e  => e.currentTarget.style.color='#383838'}
+                >
+                  ×
+                </button>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Sync section */}
+      <div style={{ marginTop:28 }}>
+        <div style={{ fontSize:11, color:'#555', letterSpacing:.7, marginBottom:14 }}>SINCRONIZAR DADOS</div>
+        <div style={{ fontSize:13, color:'#484848', marginBottom:14, lineHeight:1.5 }}>
+          Para usar o app em outro navegador ou celular, exporte um código e importe lá.
+        </div>
+        <div style={{ display:'flex', gap:9 }}>
+          <button
+            onClick={() => setShowExport(true)}
+            style={{
+              flex:1, padding:'11px', borderRadius:9, fontSize:13, fontWeight:500,
+              background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)',
+              color:'#c9a84c', transition:'all .25s ease',
+            }}
+            onMouseOver={e => e.currentTarget.style.background='rgba(201,168,76,0.18)'}
+            onMouseOut={e  => e.currentTarget.style.background='rgba(201,168,76,0.1)'}
+          >
+            ↑ Exportar
+          </button>
+          <button
+            onClick={() => setShowImport(true)}
+            style={{
+              flex:1, padding:'11px', borderRadius:9, fontSize:13, fontWeight:500,
+              background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)',
+              color:'#888', transition:'all .25s ease',
+            }}
+            onMouseOver={e => e.currentTarget.style.background='rgba(255,255,255,0.08)'}
+            onMouseOut={e  => e.currentTarget.style.background='rgba(255,255,255,0.04)'}
+          >
+            ↓ Importar
+          </button>
+        </div>
+      </div>
+
+      {showExport && <ExportModal onClose={() => setShowExport(false)} />}
+      {showImport && <ImportModal onClose={() => setShowImport(false)} />}
     </div>
   );
 }
@@ -758,7 +1025,7 @@ export default function App() {
       const s = JSON.parse(localStorage.getItem(SK.today));
       if (s?.date === t) return s;
     } catch {}
-    return { date: t, checks: [], diary: '' };
+    return { date: t, checks: [], diary: '', mood: null };
   });
 
   const [tab,          setTab]          = useState('today');
@@ -768,7 +1035,7 @@ export default function App() {
   // Auto-reset on new day
   useEffect(() => {
     if (todayState.date !== todayStr()) {
-      setTodayState({ date: todayStr(), checks: [], diary: '' });
+      setTodayState({ date: todayStr(), checks: [], diary: '', mood: null });
     }
   });
 
@@ -782,7 +1049,7 @@ export default function App() {
   useEffect(() => {
     setHistory(prev => {
       const idx   = prev.findIndex(h => h.date === todayState.date);
-      const empty = todayState.checks.length === 0 && !todayState.diary;
+      const empty = todayState.checks.length === 0 && !todayState.diary && !todayState.mood;
       if (empty && idx < 0) return prev;
       if (empty && idx >= 0) return prev.filter((_, i) => i !== idx);
       const entry = {
@@ -790,6 +1057,7 @@ export default function App() {
         monthKey: monthKey(todayState.date),
         checks:   [...todayState.checks],
         diary:    todayState.diary,
+        mood:     todayState.mood,
       };
       if (idx >= 0) { const n = [...prev]; n[idx] = entry; return n; }
       return [...prev, entry];
@@ -819,6 +1087,7 @@ export default function App() {
   }, [todayState.checks, skills]);
 
   const handleDiaryChange  = useCallback((text) => setTodayState(p => ({ ...p, diary: text })), []);
+  const handleMoodChange   = useCallback((val)  => setTodayState(p => ({ ...p, mood: val })),  []);
   const handleAddActivity  = useCallback(({ emoji, name }) => {
     setSkills(prev => [...prev, { id: `c_${Date.now()}`, emoji, name, isDefault: false }]);
   }, []);
@@ -889,6 +1158,7 @@ export default function App() {
             skills={skills} checks={todayState.checks} xpMap={xpMap}
             onToggle={handleToggle} diary={todayState.diary}
             onDiaryChange={handleDiaryChange} onAddActivity={() => setShowAddModal(true)}
+            onDeleteSkill={handleDeleteSkill} mood={todayState.mood} onMoodChange={handleMoodChange}
           />
         )}
         {tab === 'panel' && (
