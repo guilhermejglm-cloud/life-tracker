@@ -275,7 +275,7 @@ function MiniCalendar({ history, selectedDate, onSelect }) {
     const ny = viewMonth === 11 ? viewYear+1 : viewYear;
     const maxDate = new Date(ny, nm, 1);
     const todayDate = new Date(today);
-    if (maxDate <= todayDate || nm === todayDate.getMonth() && ny === todayDate.getFullYear()) {
+    if (maxDate <= todayDate || (nm === todayDate.getMonth() && ny === todayDate.getFullYear())) {
       if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y+1); } else setViewMonth(m => m+1);
     }
   };
@@ -302,7 +302,6 @@ function MiniCalendar({ history, selectedDate, onSelect }) {
           const day = i + 1;
           const ds  = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
           const isToday    = ds === today;
-          const isPast     = ds < today;
           const isFuture   = ds > today;
           const isSelected = ds === selectedDate;
           const hasEntry   = historyDates.has(ds);
